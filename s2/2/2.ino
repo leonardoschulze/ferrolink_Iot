@@ -1,7 +1,16 @@
 #include <WiFi.h>
+#include <PubSubClient.h>
 
-const String SSID = "FIESC_IOT_EDU";
-const String PASS = "8120gv08";
+WiFiClient client;
+PubSubClient mqtt(client);
+
+const String BrokerURL = "test.mosquitto.org"; //endereço do broker público
+const int BrokerPort = 1883;                   //porta do broker público
+const String BrokerUser = "";  //usuário do servidor
+const String BrokerPass = "";  //senha do servidor
+
+const String SSID = "FIESC_IOT_EDU";  //Nome do WiFi
+const String PASS = "8120gv08";  //Senha do WiFi
 
 void setup() {
   Serial.begin(115200);
@@ -12,8 +21,24 @@ void setup() {
     delay(200);
   }
   Serial.println("\nConectado com Sucesso!");
+
+  Serial.println("Conectando ao Broker...");
+  mqtt.setServer(BrokerURL.c_str(),BrokerPort);
+  String BoardID = "s2";
+  BoardID += String(random(0xffff),HEX);
+  mqtt.connect(BoardID.c_str() , BrokerUser.c_str() , BrokerPass.c_str());
+  while(!mqtt.connected()){
+    Serial.print(".");
+    delay(200);
+  }
+  Serial.println("\nConectado ao Broker!");
 }
 
 void loop() {
+  String mensagem = "Leonardo Schulze: ";
+  mensagem += "Palmeiras é maior que corinthias";
+  mqtt.publish("Topico-DSM14" , mensagem.c_str());
+  mqtt.loop();
+  delay(1000);
 
 }
