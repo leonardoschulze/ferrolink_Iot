@@ -32,12 +32,12 @@ void setup() {
     delay(200);
   }
   Serial.println("\nConectado ao Broker!");
-}
+}git pull
 
 void loop() {
-String mensagem = "Miguel Axt: ";
+String mensagem = "Miguel Axt: É UZ GURI";
 mensagem += "oi";
 mqtt.publish("Topico-DSM14", mensagem.c_str());
 mqtt.loop();
-delay(1000);
+delay(100);
 }
