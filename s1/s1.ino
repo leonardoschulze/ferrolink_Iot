@@ -1,19 +1,43 @@
-#include <Wifi.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
 
-const String SSID = "FIESC_IOT_EDU";
-const String PASS = "8120gv08";
+WiFiClient client;
+PubSubClient mqtt(client);
+
+const String BrokerURL = "test.mosquitto.org"; //endereço do broker público
+const int BrokerPort = 1883;                   //porta do broker público
+const String BrokerUser = "";  //usuário do servidor
+const String BrokerPass = "";  //senha do servidor
+
+const String SSID = "FIESC_IOT_EDU";  //Nome do WiFi
+const String PASS = "8120gv08";  //Senha do WiFi
 
 void setup() {
   Serial.begin(115200);
-  Serial.begin("Conectando ao WIFI");
-  Wifi.begin(SSID, PASS);
-  while(Wifi.status() !=WL_CONNECTED){
-    Serial.print(".");
+  Serial.println("Conectando ao WiFi"); //apresenta a mensagem na tela
+  WiFi.begin(SSID,PASS); //tenta conectar na rede
+  while(WiFi.status() != WL_CONNECTED){
+    Serial.print("."); // mostra "....."
     delay(200);
   }
   Serial.println("\nConectado com Sucesso!");
-}
+
+  Serial.println("Conectando ao Broker...");
+  mqtt.setServer(BrokerURL.c_str(),BrokerPort);
+  String BoardID = "s1";
+  BoardID += String(random(0xffff),HEX);
+  mqtt.connect(BoardID.c_str() , BrokerUser.c_str() , BrokerPass.c_str());
+  while(!mqtt.connected()){
+    Serial.print(".");
+    delay(200);
+  }
+  Serial.println("\nConectado ao Broker!");
+}git pull
 
 void loop() {
- 
+String mensagem = "Miguel Axt: É UZ GURI";
+mensagem += "oi";
+mqtt.publish("Topico-DSM14", mensagem.c_str());
+mqtt.loop();
+delay(100);
 }
