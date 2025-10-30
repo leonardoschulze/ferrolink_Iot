@@ -31,14 +31,26 @@ void setup() {
     Serial.print(".");
     delay(200);
   }
+  mqtt.subscribe("Iluminacao");  //Recebe msg
+  mqtt.setCallback(callback);  //Recebe msg
   Serial.println("\nConectado ao Broker!");
 }
 
 void loop() {
-  String mensagem = "Leonardo Schulze: ";
-  mensagem += "Palmeiras é maior que corinthias";
-  mqtt.publish("Topico-DSM14" , mensagem.c_str());
+  mqtt.publish("Iluminacao" , "Acender");  //Envia mensagem
   mqtt.loop();
   delay(1000);
 
+}
+
+void callback(char* topic, byte* payload, unsigned int length){  //processa msg recebida
+  String msg = "";
+  for(int i = 0; i< legth; i++){
+    msg += (char) payboard[i];
+  }
+  if(topic == "Iluminacao"){  //se TOPICO é Iluminação e msg Acender -> acende led
+    digitalWrite(2,HIGH);
+  }else if(topic == "Iluminacao" && msg == "Apagar"){  //se TOPICO é iluminação e msg é Apagar -> apaga led
+    digitalWrite(2,LOW);  //processa msg recebida
+  }
 }
