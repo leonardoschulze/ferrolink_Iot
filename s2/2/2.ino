@@ -1,12 +1,17 @@
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include "env.h"
 
-WiFiClient client;
+const byte TRIGGER_PIN = 5;
+const byte ECHO_PIN = 18;
+
+WiFiClientSecure client;
 PubSubClient mqtt(client);
 
 void setup() {
   Serial.begin(115200);
+  client.setInsecure();
   Serial.println("Conectando ao WiFi"); //apresenta a mensagem na tela
   WiFi.begin(WIFI_SSID,WIFI_PASS); //tenta conectar na rede
   while(WiFi.status() != WL_CONNECTED){
@@ -24,12 +29,46 @@ void setup() {
     Serial.print(".");
     delay(200);
   }
+
+   Serial.begin(115200); //sensor1
+  pinMode(TRIGGER_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+}
+
+long lerDistancia() {
+  digitalWrite(TRIGGER_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIGGER_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIGGER_PIN, LOW);
+
+  long duracao = pulseIn(ECHO_PIN, HIGH);
+  long distancia = duracao * 0.034924 / 2;
+
+  return distancia; //término sensor1
+
   mqtt.subscribe("TOPIC_ILUM");  //Recebe msg
   mqtt.setCallback(callback);  //Recebe msg
   Serial.println("\nConectado ao Broker!");
 }
 
 void loop() {
+
+ long distancia = lerDistancia();
+
+  Serial.print("Distância: ");
+  Serial.print(distancia);
+  Serial.println(" cm");
+
+  if (distancia < 10) {
+    Serial.println("Trem detectado!");
+    mqtt.publish(TOPIC_PRESENCA1, "Trem detectado");
+    delay(2000); 
+  }
+
+  delay(500);
+
+
   mqtt.publish("TOPIC_ILUM" , "Acender");  //Envia mensagem
   mqtt.loop();
   delay(1000);
@@ -38,8 +77,8 @@ void loop() {
 
 void callback(char* topic, byte* payload, unsigned int length){  //processa msg recebida
   String msg = "";
-  for(int i = 0; i< legth; i++){
-    msg += (char) payboard[i];
+  for(int i = 0; i< length; i++){
+    msg += (char) payload[i];
   }
   if(topic == "TOPIC_ILUM"){  //se TOPICO é Iluminação e msg Acender -> acende led
     digitalWrite(2,HIGH);
