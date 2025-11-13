@@ -5,6 +5,8 @@
 
 const byte TRIGGER_PIN = 5;
 const byte ECHO_PIN = 18;
+const byte TRIGGER_PIN2 = 19;
+const byte ECHO_PIN2 = 21;
 
 WiFiClientSecure client;
 PubSubClient mqtt(client);
@@ -33,6 +35,10 @@ void setup() {
    Serial.begin(115200); //sensor1
   pinMode(TRIGGER_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
+
+  Serial.begin(115200); //sensor2
+  pinMode(TRIGGER_PIN2, OUTPUT);
+  pinMode(ECHO_PIN2, INPUT);
 }
 
 long lerDistancia() {
@@ -46,6 +52,20 @@ long lerDistancia() {
   long distancia = duracao * 0.034924 / 2;
 
   return distancia; //término sensor1
+
+}
+
+  long lerDistancia2() {
+  digitalWrite(TRIGGER_PIN2, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIGGER_PIN2, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIGGER_PIN2, LOW);
+
+  long duracao2 = pulseIn(ECHO_PIN2, HIGH);
+  long distancia2 = duracao2 * 0.034924 / 2;
+
+  return distancia2; //término sensor2
 
   mqtt.subscribe("TOPIC_ILUM");  //Recebe msg
   mqtt.setCallback(callback);  //Recebe msg
@@ -68,10 +88,19 @@ void loop() {
 
   delay(500);
 
+   long distancia2 = lerDistancia2();
 
-  mqtt.publish("TOPIC_ILUM" , "Acender");  //Envia mensagem
-  mqtt.loop();
-  delay(1000);
+  Serial.print("Distância: ");
+  Serial.print(distancia2);
+  Serial.println(" cm");
+
+  if (distancia2 < 10) {
+    Serial.println("Trem detectado!");
+    mqtt.publish(TOPIC_PRESENCA2, "Trem detectado");
+    delay(2000); 
+  }
+
+  delay(500);
 
 }
 
