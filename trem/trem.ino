@@ -45,6 +45,11 @@ void pararTrem() {
   digitalWrite(PIN_TRAS, LOW);
 }
 
+void publicarStatus(const char* status) {
+  mqtt.publish(TOPIC_STATUS, status);
+  Serial.println(String("Status enviado: ") + status);
+}
+
 void callback(char* topic, byte* payload, unsigned int length) {
   String msg;
   for (int i = 0; i < length; i++) {
@@ -55,12 +60,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   if (msg == "Trem_Frente") {
     tremFrente();
+    publicarStatus("ANDANDO");
   } 
   else if (msg == "Trem_Tras") {
     tremTras();
+    publicarStatus("ANDANDO");
   }
   else if (msg == "Trem_Parar") {
     pararTrem();
+    publicarStatus("PARADO");
   }
 }
 
@@ -69,7 +77,6 @@ void setup() {
 
   pinMode(PIN_FRENTE, OUTPUT);
   pinMode(PIN_TRAS, OUTPUT);
-
   pinMode(LED_R, OUTPUT);
   pinMode(LED_G, OUTPUT);
   pinMode(LED_B, OUTPUT);
@@ -99,8 +106,9 @@ void setup() {
   Serial.println("Broker Conectado!");
 
   piscarCor(0, 1, 0, 200, 3); // Pisca verde 3x quando conecta
-  mqtt.subscribe(TOPIC_ILUM);
+  mqtt.subscribe(TOPIC_TREM);
   setColor(0,1,0); // Verde fixo (parado)
+  publicarStatus("PARADO");
 }
 
 void loop() {
