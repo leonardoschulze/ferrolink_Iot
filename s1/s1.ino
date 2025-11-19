@@ -21,6 +21,19 @@ WiFiClientSecure client;
 PubSubClient mqtt(client);
 DHT dht(DHTPIN, DHTTYPE);
 
+// ======= Controle do trem =======
+bool tremDetectadoAnterior = false;
+unsigned long tempoInicioTrem = 0;
+bool mensagemParadoEnviada = false;
+
+// ======= Controle do LDR =======
+unsigned long ultimoEnvioLDR = 0;
+const unsigned long intervaloLDR = 10000;
+
+// ======= Controle do DHT11 =======
+unsigned long ultimoEnvioTemp = 0;
+const unsigned long intervaloTemp = 10000;
+
 // ======= Funções Auxiliares =======
 void setColor(int r, int g, int b) {
   digitalWrite(LED_R, r);
@@ -44,10 +57,39 @@ float medirDistancia() {
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  long duracao = pulseIn(ECHO_PIN, HIGH, 30000); // timeout 30ms
-  if (duracao == 0) return -1; // sem retorno
-  float distancia = duracao * 0.034 / 2.0; // cm
-  return distancia;
+  long duracao = pulseIn(ECHO_PIN, HIGH, 30000);
+  if (duracao == 0) return -1;
+
+  return duracao * 0.034 / 2.0;
+}
+
+// ======= FUNÇÃO COM LÓGICA DE ALERTA =======
+void enviarTemperaturaUmidade() {
+  float temperatura = dht.readTemperature();
+  float umidade = dht.readHumidity();
+
+  if (!isnan(temperatura) && !isnan(umidade)) {
+
+    char tempStr[8];
+    char umidStr[8];
+
+    dtostrf(temperatura, 4, 1, tempStr);
+    dtostrf(umidade, 4, 1, umidStr);
+
+    // Envia temperatura e umidade normalmente
+    mqtt.publish(TOPIC_TEMP, tempStr);
+    mqtt.publish(TOPIC_UMID, umidStr);
+
+    // ===== ALERTA DE TEMPERATURA =====
+    if (temperatura >= 31.0) {
+      mqtt.publish(TOPIC_TEMP, "ALERTA: Temperatura alta detectada!");
+      Serial.printf("ALERTA! Temperatura: %.1f °C | Umidade: %.1f %%\n",
+                    temperatura, umidade);
+    } else {
+      Serial.printf("Temperatura enviada: %.1f °C | Umidade enviada: %.1f %%\n",
+                    temperatura, umidade);
+    }
+  }
 }
 
 void reconnectMQTT() {
@@ -55,12 +97,12 @@ void reconnectMQTT() {
     Serial.print("Tentando conectar ao broker... ");
     if (mqtt.connect("S1_ESP32", BROKER_USER, BROKER_PASS)) {
       Serial.println("Conectado!");
-      piscarCor(0, 1, 0, 200, 3); // Verde 3x
+      piscarCor(0, 1, 0, 200, 3);
     } else {
       Serial.print("Falha, rc=");
       Serial.print(mqtt.state());
       Serial.println(" Tentando novamente em 5s...");
-      piscarCor(1, 1, 0, 300, 1); // Laranja piscando
+      piscarCor(1, 1, 0, 300, 1);
       delay(5000);
     }
   }
@@ -82,67 +124,85 @@ void setup() {
 
   client.setInsecure();
 
-  Serial.println("Conectando ao WiFi...");
   WiFi.begin(WIFI_SSID, WIFI_PASS);
-
   while (WiFi.status() != WL_CONNECTED) {
-    piscarCor(1, 1, 0, 300, 1); // Laranja piscando
+    piscarCor(1, 1, 0, 300, 1);
   }
 
   Serial.println("\nWiFi Conectado!");
-  Serial.print("IP Local: ");
-  Serial.println(WiFi.localIP());
-
   mqtt.setServer(BROKER_URL, BROKER_PORT);
   reconnectMQTT();
 }
 
 // ======= Loop =======
 void loop() {
+
   if (!mqtt.connected()) {
     reconnectMQTT();
   }
   mqtt.loop();
 
-  // === DHT11 ===
-  float temperatura = dht.readTemperature();
-  float umidade = dht.readHumidity();
-
-  if (!isnan(temperatura) && !isnan(umidade)) {
-    char tempStr[8];
-    char umidStr[8];
-    dtostrf(temperatura, 4, 1, tempStr);
-    dtostrf(umidade, 4, 1, umidStr);
-
-    mqtt.publish(TOPIC_TEMP, tempStr);
-    mqtt.publish(TOPIC_UMID, umidStr);
-    Serial.printf("Temperatura: %.1f °C | Umidade: %.1f %%\n", temperatura, umidade);
-  } else {
-    Serial.println("Erro ao ler DHT11");
+  // === Enviar temperatura/umidade ===
+  if (millis() - ultimoEnvioTemp >= intervaloTemp) {
+    enviarTemperaturaUmidade();
+    ultimoEnvioTemp = millis();
   }
 
   // === LDR ===
-  int luz = analogRead(LDR_PIN);
-  char luzStr[8];
-  itoa(luz, luzStr, 10);
-  mqtt.publish(TOPIC_LUZ, luzStr);
-  Serial.printf("Luminosidade: %d\n", luz);
+  if (millis() - ultimoEnvioLDR >= intervaloLDR) {
+
+    int luz = analogRead(LDR_PIN);
+    char luzStr[8];
+    itoa(luz, luzStr, 10);
+
+    mqtt.publish(TOPIC_LUZ, luzStr);
+    Serial.printf("LDR enviado: %d\n", luz);
+
+    ultimoEnvioLDR = millis();
+
+    if (luz >= 2500) {
+      mqtt.publish(TOPIC_LUZ, "Noite detectada");
+      Serial.println("MQTT → Noite detectada");
+      setColor(1, 1, 1);
+    } else {
+      mqtt.publish(TOPIC_LUZ, "Dia detectado");
+      Serial.println("MQTT → Dia detectado");
+      setColor(0, 0, 0);
+    }
+  }
 
   // === Ultrassônico ===
   float distancia = medirDistancia();
-  if (distancia > 0) {
-    Serial.printf("Distância: %.1f cm\n", distancia);
-  } else {
-    Serial.println("Sem leitura do sensor ultrassônico");
-  }
+  bool tremAgora = (distancia > 0 && distancia < 15);
 
-  if (distancia > 0 && distancia < 15) {  // trem detectado
-    digitalWrite(LED_TREM, HIGH);
+  if (tremAgora && !tremDetectadoAnterior) {
     mqtt.publish(TOPIC_TREM, "Trem detectado");
-  } else {
-    digitalWrite(LED_TREM, LOW);
-    mqtt.publish(TOPIC_TREM, "Sem trem");
+    Serial.println("MQTT → Trem detectado");
+    digitalWrite(LED_TREM, HIGH);
+
+    tempoInicioTrem = millis();
+    mensagemParadoEnviada = false;
   }
 
-  delay(2000);
+  if (tremAgora && tremDetectadoAnterior) {
+    if (!mensagemParadoEnviada) {
+      unsigned long tempoParado = millis() - tempoInicioTrem;
+
+      if (tempoParado >= 5000) {
+        mqtt.publish(TOPIC_TREM, "Trem parado no ponto B");
+        Serial.println("MQTT → Trem parado no ponto B");
+        mensagemParadoEnviada = true;
+      }
+    }
+  }
+
+  if (!tremAgora && tremDetectadoAnterior) {
+    Serial.println("Trem saiu do ponto B");
+    digitalWrite(LED_TREM, LOW);
+    mensagemParadoEnviada = false;
+  }
+
+  tremDetectadoAnterior = tremAgora;
+
+  delay(200);
 }
